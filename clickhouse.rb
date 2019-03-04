@@ -2,13 +2,10 @@ class Clickhouse < Formula
   desc "ClickHouse is a free analytic DBMS for big data."
   homepage "https://clickhouse.yandex"
   url "https://github.com/yandex/ClickHouse.git", :tag => "v19.3.6-stable"
-  version "v19.3.6-stable"
+  version "v19.3.6"
 
   head "https://github.com/yandex/ClickHouse.git"
 
-  devel do
-    url "https://github.com/yandex/ClickHouse.git", :tag => "v19.3.6-stable"
-  end
 
   depends_on "gcc"
   depends_on "mysql@5.7" => :build
@@ -20,13 +17,6 @@ class Clickhouse < Formula
   depends_on "gettext" => :build
   depends_on "zlib" => :build
   depends_on "readline" => :build
-
-  bottle do
-    cellar :any
-    rebuild 2
-    root_url 'https://github.com/WhiteWingedSoul/homebrew-clickhouse/releases/download/v19.3.6-stable'
-    sha256 "ec4057ae98a2e153fa2ef96d7cbd8245d908c6e17de99e2ec7068413a47bfe8d" => :high_sierra
-  end
 
   def install
     inreplace "libs/libmysqlxx/cmake/find_mysqlclient.cmake", "/usr/local/opt/mysql/lib", "/usr/local/opt/mysql@5.7/lib"
@@ -44,11 +34,14 @@ class Clickhouse < Formula
       -DUSE_INTERNAL_BOOST_LIBRARY=1
       -DENABLE_EMBEDDED_COMPILER=1
       -DUSE_INTERNAL_LLVM_LIBRARY=0
+      -DENABLE_MYSQL=1
+      -DUSE_INTERNAL_MYSQL_LIBRARY=1
+      -DAPPLE=1
     ]
 
     mkdir "build" do
       system "cmake", "..", *std_cmake_args, *args
-      system "make"
+      system "ninja"
     end
 
     bin.install "#{buildpath}/build/dbms/programs/clickhouse"
