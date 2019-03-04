@@ -9,10 +9,11 @@ Build without ICU, support for collations and charset conversion functions disab
 ### Add homebrew tap
 
 ```bash
-brew tap arduanov/clickhouse
+brew tap WhiteWingedSoul/clickhouse
 ```
 
 ### Install ClickHouse
+
 ```bash
 brew upgrade
 brew install clickhouse
