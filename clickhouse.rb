@@ -1,90 +1,110 @@
 class Clickhouse < Formula
-  desc "ClickHouse is a free analytic DBMS for big data."
-  homepage "https://clickhouse.yandex"
-  url "https://github.com/yandex/ClickHouse.git", :tag => "v19.3.6-stable"
-  version "v19.3.6"
+  desc "is an open-source column-oriented database management system."
+  homepage "https://clickhouse.yandex/"
+  url "https://github.com/yandex/ClickHouse/archive/v19.3.6-stable.zip"
+  version "19.3.6"
+  sha256 "2c5bcd8a6fb72fb35ee4f40128b950c5e43abf7e81ec59b759b9281334494f7f"
+
+  devel do
+    url "https://github.com/yandex/ClickHouse/archive/v1.1.54304-testing.zip"
+    version "1.1.54304"
+    sha256 "ea94e6f24154ed0cd6aed2f7beaa0a38d81a682fb59ae15e47a019008e4d41da"
+  end
+
+  bottle do
+    root_url 'https://github.com/hatarist/homebrew-clickhouse/releases/download/bottle'
+    sha256 "4a9539797fbedc28412f7bc0bdd1096e3da9eb9109448abe45319091ef99aa94" => :el_capitan
+  end
 
   head "https://github.com/yandex/ClickHouse.git"
 
-
-  depends_on "gcc"
-  depends_on "mysql@5.7" => :build
-  depends_on "icu4c" => :build
   depends_on "cmake" => :build
+  depends_on "gcc@7" => :build
+
+  depends_on "boost" => :build
+  depends_on "icu4c" => :build
+  depends_on "mysql@5.7" => :build
   depends_on "openssl" => :build
-  depends_on "unixodbc" =>:build
+  depends_on "unixodbc" => :build
   depends_on "libtool" => :build
   depends_on "gettext" => :build
   depends_on "zlib" => :build
-  depends_on "readline" => :build
+  depends_on "readline" => :recommended
 
   def install
+    ENV["ENABLE_MONGODB"] = "0"
+    ENV["CC"] = "#{Formula["gcc@7"].bin}/gcc-7"
+    ENV["CXX"] = "#{Formula["gcc@7"].bin}/g++-7"
+
     inreplace "libs/libmysqlxx/cmake/find_mysqlclient.cmake", "/usr/local/opt/mysql/lib", "/usr/local/opt/mysql@5.7/lib"
     inreplace "libs/libmysqlxx/cmake/find_mysqlclient.cmake", "/usr/local/opt/mysql/include", "/usr/local/opt/mysql@5.7/include"
 
-    inreplace "dbms/programs/server/config.xml" do |s|
-      s.gsub! "/var/lib/", "#{var}/lib/"
-      s.gsub! "/var/log/", "#{var}/log/"
+    cmake_args = %w[]
+    cmake_args << "-DUSE_STATIC_LIBRARIES=0" if MacOS.version >= :sierra
+
+    mkdir "build"
+    cd "build" do
+      system "cmake", "..", *cmake_args
+      system "make"
+      if MacOS.version >= :sierra
+        lib.install Dir["#{buildpath}/build/dbms/*.dylib"]
+        lib.install Dir["#{buildpath}/build/contrib/libzlib-ng/*.dylib"]
+      end
+      bin.install "#{buildpath}/build/dbms/src/Server/clickhouse"
+      bin.install_symlink "clickhouse" => "clickhouse-server"
+      bin.install_symlink "clickhouse" => "clickhouse-client"
+    end
+
+    mkdir "#{var}/clickhouse"
+
+    inreplace "#{buildpath}/dbms/src/Server/config.xml" do |s|
+      s.gsub! "/var/lib/clickhouse/", "#{var}/clickhouse/"
+      s.gsub! "/var/log/clickhouse-server/", "#{var}/log/clickhouse/"
       s.gsub! "<!-- <max_open_files>262144</max_open_files> -->", "<max_open_files>262144</max_open_files>"
     end
 
-    args = %W[
-      -DENABLE_TESTS=0
-      -DENABLE_TCMALLOC=0
-      -DUSE_INTERNAL_BOOST_LIBRARY=1
-      -DENABLE_EMBEDDED_COMPILER=1
-      -DUSE_INTERNAL_LLVM_LIBRARY=0
-      -DENABLE_MYSQL=1
-      -DUSE_INTERNAL_MYSQL_LIBRARY=1
-      -DAPPLE=1
-    ]
+    # Copy configuration files
+    mkdir "#{etc}/clickhouse/"
+    mkdir "#{etc}/clickhouse/config.d/"
+    mkdir "#{etc}/clickhouse/users.d/"
 
-    mkdir "build" do
-      system "cmake", "..", *std_cmake_args, *args
-      system "ninja"
-    end
-
-    bin.install "#{buildpath}/build/dbms/programs/clickhouse"
-    bin.install_symlink "clickhouse" => "clickhouse-client"
-    bin.install_symlink "clickhouse" => "clickhouse-server"
-    bin.install_symlink "clickhouse" => "clickhouse-local"
-    bin.install_symlink "clickhouse" => "clickhouse-compressor"
-    bin.install_symlink "clickhouse" => "clickhouse-copier"
-    bin.install_symlink "clickhouse" => "clickhouse-format"
-    bin.install_symlink "clickhouse" => "clickhouse-lld"
-    bin.install_symlink "clickhouse" => "clickhouse-obfuscator"
-    bin.install_symlink "clickhouse" => "clickhouse-clang"
-
-    mkdir "#{etc}/clickhouse-client/"
-    (etc/"clickhouse-client").install "#{buildpath}/dbms/programs/client/clickhouse-client.xml"
-
-    mkdir "#{etc}/clickhouse-server/"
-    (etc/"clickhouse-server").install "#{buildpath}/dbms/programs/server/config.xml"
-    (etc/"clickhouse-server").install "#{buildpath}/dbms/programs/server/users.xml"
+    (etc/"clickhouse").install "#{buildpath}/dbms/src/Server/config.xml"
+    (etc/"clickhouse").install "#{buildpath}/dbms/src/Server/users.xml"
   end
 
-  def plist; <<~EOS
+  def plist; <<-EOS.undent
     <?xml version="1.0" encoding="UTF-8"?>
     <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
     <plist version="1.0">
-    <dict>
-      <key>Label</key>
-      <string>#{plist_name}</string>
-      <key>RunAtLoad</key>
-      <true/>
-      <key>KeepAlive</key>
-      <false/>
-      <key>ProgramArguments</key>
-      <array>
-          <string>#{opt_bin}/clickhouse-server</string>
-          <string>--config-file</string>
-          <string>#{etc}/clickhouse-server/config.xml</string>
-      </array>
-      <key>WorkingDirectory</key>
-      <string>#{HOMEBREW_PREFIX}</string>
-    </dict>
+      <dict>
+        <key>Label</key>
+        <string>#{plist_name}</string>
+        <key>RunAtLoad</key>
+        <true/>
+        <key>KeepAlive</key>
+        <false/>
+        <key>ProgramArguments</key>
+        <array>
+            <string>#{opt_bin}/clickhouse-server</string>
+            <string>--config-file</string>
+            <string>#{etc}/clickhouse/config.xml</string>
+        </array>
+        <key>WorkingDirectory</key>
+        <string>#{HOMEBREW_PREFIX}</string>
+      </dict>
     </plist>
     EOS
+  end
+
+  def caveats; <<-EOS.undent
+    The configuration files are available at:
+      #{etc}/clickhouse/
+    The database itself will store data at:
+      #{var}/clickhouse/
+
+    If you're going to run the server, make sure to increase `maxfiles` limit:
+      https://github.com/yandex/ClickHouse/blob/master/MacOS.md
+  EOS
   end
 
   test do
